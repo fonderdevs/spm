@@ -28,6 +28,11 @@ make
 make install
 ```
 
+#### Uninstall the package manager:
+```bash
+make uninstall
+make clean
+```
 ## 📦 Usage
 
 #### Basic Usage:
