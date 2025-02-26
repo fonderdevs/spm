@@ -17,7 +17,7 @@ Steal is a simple and efficient package manager designed for FonderOS.
 #### Clone the repository:
 
 ```bash
-git clone https://github.com/parkourer10/steal-pkg-manager.git
+git clone https://github.com/fonderdevs/steal.git
 cd steal-pkg-manager
 ```
 
