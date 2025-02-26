@@ -136,6 +136,7 @@ void install_package(const char* package_name) {
     char package_path[PATH_SIZE];
     char download_cmd[BUFFER_SIZE];
     char install_script_path[PATH_SIZE];
+    char cmd[BUFFER_SIZE];
     
     // Create package directory
     int ret = snprintf(package_path, sizeof(package_path), 
@@ -148,7 +149,7 @@ void install_package(const char* package_name) {
     // Download and extract package
     printf("Downloading package '%s'...\n", package_name);
     ret = snprintf(download_cmd, sizeof(download_cmd),
-             "mkdir -p %s && cd %s && wget -q %s/%s.tar.xz && tar xf %s.tar.xz && rm %s.tar.xz",
+             "mkdir -p %s && cd %s && wget -q %s/%s.tar.xz && tar xf %s.tar.xz && cd %s",
              package_path, package_path, server_url, package_name, package_name, package_name);
     if (ret < 0 || (size_t)ret >= sizeof(download_cmd)) {
         printf("Error: Command too long\n");
@@ -159,23 +160,22 @@ void install_package(const char* package_name) {
         printf("Failed to download package '%s'\n", package_name);
         return;
     }
-    
-    // Check for install script
+
+    // Check for install script in the correct nested directory
     ret = snprintf(install_script_path, sizeof(install_script_path), 
-             "%s/.install", package_path);
+             "%s/%s/.install", package_path, package_name);
     if (ret < 0 || (size_t)ret >= sizeof(install_script_path)) {
         printf("Error: Install script path too long\n");
         return;
     }
 
     if (access(install_script_path, F_OK) != 0) {
-        printf("Install script not found for package '%s'\n", package_name);
+        printf("Install script not found at: %s\n", install_script_path);
         return;
     }
 
-    // Execute install script
-    char cmd[BUFFER_SIZE];
-    ret = snprintf(cmd, sizeof(cmd), "cd %s && sh .install", package_path);
+    // Execute install script from the correct directory
+    ret = snprintf(cmd, sizeof(cmd), "cd %s/%s && sh .install", package_path, package_name);
     if (ret < 0 || (size_t)ret >= sizeof(cmd)) {
         printf("Error: Command too long\n");
         return;
