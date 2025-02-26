@@ -73,11 +73,12 @@ void update_repos() {
     printf("Updating package repositories from %s...\n", server_url);
     char cmd[BUFFER_SIZE];
     
-    // First download the packages.db
     snprintf(cmd, sizeof(cmd), 
              "mkdir -p %s && cd %s && wget -q %s/packages.db",
              REPO_PATH, REPO_PATH, server_url);
-    system(cmd);
+    if (system(cmd) != 0) {
+        printf("Failed to update repositories\n");
+    }
 }
 
 void upgrade_packages() {
@@ -137,17 +138,19 @@ void install_package(const char* package_name) {
     char install_script_path[PATH_SIZE];
     
     // Create package directory
-    if (snprintf(package_path, sizeof(package_path), 
-             REPO_PATH "/%s", package_name) >= sizeof(package_path)) {
+    int ret = snprintf(package_path, sizeof(package_path), 
+             REPO_PATH "/%s", package_name);
+    if (ret < 0 || (size_t)ret >= sizeof(package_path)) {
         printf("Error: Package path too long\n");
         return;
     }
     
     // Download and extract package
     printf("Downloading package '%s'...\n", package_name);
-    if (snprintf(download_cmd, sizeof(download_cmd),
-             "mkdir -p %s && cd %s && wget -q %s/%s/%s.tar.xz && tar xf %s.tar.xz && rm %s.tar.xz",
-             package_path, package_path, server_url, package_name, package_name, package_name, package_name) >= sizeof(download_cmd)) {
+    ret = snprintf(download_cmd, sizeof(download_cmd),
+             "mkdir -p %s && cd %s && wget -q %s/%s.tar.xz && tar xf %s.tar.xz && rm %s.tar.xz",
+             package_path, package_path, server_url, package_name, package_name, package_name);
+    if (ret < 0 || (size_t)ret >= sizeof(download_cmd)) {
         printf("Error: Command too long\n");
         return;
     }
@@ -158,8 +161,9 @@ void install_package(const char* package_name) {
     }
     
     // Check for install script
-    if (snprintf(install_script_path, sizeof(install_script_path), 
-             "%s/.install", package_path) >= sizeof(install_script_path)) {
+    ret = snprintf(install_script_path, sizeof(install_script_path), 
+             "%s/.install", package_path);
+    if (ret < 0 || (size_t)ret >= sizeof(install_script_path)) {
         printf("Error: Install script path too long\n");
         return;
     }
@@ -171,7 +175,8 @@ void install_package(const char* package_name) {
 
     // Execute install script
     char cmd[BUFFER_SIZE];
-    if (snprintf(cmd, sizeof(cmd), "cd %s && sh .install", package_path) >= sizeof(cmd)) {
+    ret = snprintf(cmd, sizeof(cmd), "cd %s && sh .install", package_path);
+    if (ret < 0 || (size_t)ret >= sizeof(cmd)) {
         printf("Error: Command too long\n");
         return;
     }
@@ -192,21 +197,24 @@ void install_package(const char* package_name) {
         // Get package version
         if (get_package_info(package_name, version, category, &deps, &dep_count, description)) {
             // Create marker directory
-            if (snprintf(marker_path, sizeof(marker_path), 
-                    "%s/share/steal/installed", INSTALL_PATH) < sizeof(marker_path)) {
+            ret = snprintf(marker_path, sizeof(marker_path), 
+                    "%s/share/steal/installed", INSTALL_PATH);
+            if (ret >= 0 && (size_t)ret < sizeof(marker_path)) {
                 mkdir(marker_path, 0755);
             }
             
             // Create marker file
-            if (snprintf(marker_path, sizeof(marker_path),
-                    "%s/share/steal/installed/%s", INSTALL_PATH, package_name) < sizeof(marker_path)) {
+            ret = snprintf(marker_path, sizeof(marker_path),
+                    "%s/share/steal/installed/%s", INSTALL_PATH, package_name);
+            if (ret >= 0 && (size_t)ret < sizeof(marker_path)) {
                 FILE* marker = fopen(marker_path, "w");
                 if (marker) fclose(marker);
             }
             
             // Create version file
-            if (snprintf(version_path, sizeof(version_path),
-                    "%s/share/steal/installed/%s.version", INSTALL_PATH, package_name) < sizeof(version_path)) {
+            ret = snprintf(version_path, sizeof(version_path),
+                    "%s/share/steal/installed/%s.version", INSTALL_PATH, package_name);
+            if (ret >= 0 && (size_t)ret < sizeof(version_path)) {
                 FILE* ver_file = fopen(version_path, "w");
                 if (ver_file) {
                     fprintf(ver_file, "%s\n", version);
@@ -218,17 +226,28 @@ void install_package(const char* package_name) {
         }
         
         // Cleanup ALL downloaded files including source and .install
-        snprintf(cmd, sizeof(cmd), "rm -rf %s/*", package_path);
-        system(cmd);
-        snprintf(cmd, sizeof(cmd), "rm -rf %s", package_path);
-        system(cmd);
+        ret = snprintf(cmd, sizeof(cmd), "rm -rf %s/*", package_path);
+        if (ret >= 0 && (size_t)ret < sizeof(cmd)) {
+            if (system(cmd) != 0) {
+                printf("Warning: Failed to clean up package files\n");
+            }
+        }
+        
+        ret = snprintf(cmd, sizeof(cmd), "rm -rf %s", package_path);
+        if (ret >= 0 && (size_t)ret < sizeof(cmd)) {
+            if (system(cmd) != 0) {
+                printf("Warning: Failed to remove package directory\n");
+            }
+        }
         
         printf("Installation completed successfully\n");
     } else {
         printf("Installation failed with error code: %d\n", result);
         // Cleanup on failure too
         snprintf(cmd, sizeof(cmd), "rm -rf %s", package_path);
-        system(cmd);
+        if (system(cmd) != 0) {
+            printf("Warning: Failed to clean up after failed installation\n");
+        }
     }
 }
 
