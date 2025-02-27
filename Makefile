@@ -1,23 +1,39 @@
 CC = gcc
 CFLAGS = -O2 -Wall -Wextra -Werror
-LDFLAGS =
+LDFLAGS = -lcurl -pthread
 PREFIX = /usr
 INSTALL_DIRS = $(PREFIX)/bin /var/lib/steal/repos /etc/steal /usr/local/share/steal/installed
+SRC_DIR = src
 
 # ANSI color codes
 BLUE = \033[1;34m
 GREEN = \033[1;32m
 YELLOW = \033[1;33m
 CYAN = \033[1;36m
+RED = \033[1;31m
 NC = \033[0m
 
-all: steal
+# Check for required development packages
+CHECK_CURL := $(shell pkg-config --exists libcurl && echo "yes" || echo "no")
 
-steal: main.c
+all: check_deps steal
+
+check_deps:
+	@if [ "$(CHECK_CURL)" = "no" ]; then \
+		echo "$(RED)Error: libcurl development package is not installed$(NC)"; \
+		echo "$(YELLOW)Please install it using one of these commands:$(NC)"; \
+		echo "  - Debian/Ubuntu: sudo apt install libcurl4-openssl-dev"; \
+		echo "  - Fedora: sudo dnf install libcurl-devel"; \
+		echo "  - Arch Linux: sudo pacman -S curl"; \
+		echo "  - Alpine: sudo apk add curl-dev"; \
+		exit 1; \
+	fi
+
+steal: $(SRC_DIR)/main.c
 	@echo "$(BLUE)╭─────────────────────────────╮$(NC)"
 	@echo "$(BLUE)│$(NC)    $(CYAN)Compiling steal...$(NC)        $(BLUE)│$(NC)"
 	@echo "$(BLUE)╰─────────────────────────────╯$(NC)"
-	@$(CC) $(CFLAGS) $(LDFLAGS) -o steal main.c
+	@$(CC) $(CFLAGS) -o $@ $< $(LDFLAGS)
 	@echo "$(GREEN)✓ Successfully compiled steal$(NC)\n"
 
 install: steal
@@ -45,4 +61,4 @@ clean:
 	@rm -f steal *.o
 	@echo "$(GREEN)✓ Successfully cleaned files$(NC)\n"
 
-.PHONY: all install uninstall clean 
+.PHONY: all check_deps install uninstall clean 
