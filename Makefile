@@ -18,17 +18,6 @@ CHECK_CURL := $(shell pkg-config --exists libcurl && echo "yes" || echo "no")
 
 all: check_deps steal
 
-check_deps:
-	@if [ "$(CHECK_CURL)" = "no" ]; then \
-		echo "$(RED)Error: libcurl development package is not installed$(NC)"; \
-		echo "$(YELLOW)Please install it using one of these commands:$(NC)"; \
-		echo "  - Debian/Ubuntu: sudo apt install libcurl4-openssl-dev"; \
-		echo "  - Fedora: sudo dnf install libcurl-devel"; \
-		echo "  - Arch Linux: sudo pacman -S curl"; \
-		echo "  - Alpine: sudo apk add curl-dev"; \
-		exit 1; \
-	fi
-
 steal: $(SRC_DIR)/main.c
 	@echo "$(BLUE)╭─────────────────────────────╮$(NC)"
 	@echo "$(BLUE)│$(NC)    $(CYAN)Compiling steal...$(NC)        $(BLUE)│$(NC)"
