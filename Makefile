@@ -1,5 +1,5 @@
 CC = gcc
-CFLAGS = -O2 -Wall -Wextra -Werror
+CFLAGS = -O2 -Wall -Wextra
 LDFLAGS = -lcurl -pthread
 PREFIX = /usr
 INSTALL_DIRS = $(PREFIX)/bin /var/lib/steal/repos /etc/steal /usr/local/share/steal/installed
