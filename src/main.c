@@ -13,7 +13,7 @@
 #define REPO_PATH "/var/lib/steal/repos"
 #define INSTALL_PATH "/usr/local"
 #define PKG_DB_PATH "/var/lib/steal/pkgdb"
-#define DEFAULT_SERVER_URL "http://192.168.29.150:8080/packages/"
+#define DEFAULT_SERVER_URL "http://192.168.29.150:8090/packages/"
 #define CONFIG_FILE "/etc/steal/config"
 #define VERSION "2.0.2"
 #define AUTHOR "parkourer10"
