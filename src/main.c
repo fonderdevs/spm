@@ -10,12 +10,13 @@
 #include <curl/curl.h>
 #include <sys/ioctl.h>
 #include <pthread.h>
+#include <ctype.h>
 #define REPO_PATH "/var/lib/steal/repos"
 #define INSTALL_PATH "/usr/local"
 #define PKG_DB_PATH "/var/lib/steal/pkgdb"
-#define DEFAULT_SERVER_URL "http://192.168.29.150:8090/packages/"
+#define DEFAULT_SERVER_URL "http://192.168.29.150:8090/server/packages/"
 #define CONFIG_FILE "/etc/steal/config"
-#define VERSION "2.0.2"
+#define VERSION "2.0.3"
 #define AUTHOR "parkourer10"
 #define OS_NAME "FonderOS"
 #define BUFFER_SIZE 2048     // For general commands
@@ -90,8 +91,11 @@ static int progress_callback(void *clientp, double dltotal, double dlnow, double
             progress->estimatedTime = (dltotal - dlnow) / progress->downloadSpeed;
         }
         
-        // Calculate percentage
-        int percent = (int)((dlnow / dltotal) * 100);
+        // Calculate percentage - protect against division by zero
+        int percent = 0;
+        if (dltotal > 0) {
+            percent = (int)((dlnow / dltotal) * 100);
+        }
         
         // Only redraw if percentage changed
         if (percent != progress->lastPercent) {
@@ -100,7 +104,16 @@ static int progress_callback(void *clientp, double dltotal, double dlnow, double
             
             // Print progress bar
             int barWidth = progress->termWidth - 50;  // Reserve space for text
-            int filledWidth = (int)((dlnow / dltotal) * barWidth);
+            if (barWidth < 10) barWidth = 10;  // Ensure minimum width
+            
+            int filledWidth = 0;
+            if (dltotal > 0) {
+                filledWidth = (int)((dlnow / dltotal) * barWidth);
+            }
+            
+            // Ensure filledWidth is within valid range
+            if (filledWidth < 0) filledWidth = 0;
+            if (filledWidth > barWidth) filledWidth = barWidth;
             
             printf("[");
             for (int i = 0; i < barWidth; i++) {
@@ -113,7 +126,11 @@ static int progress_callback(void *clientp, double dltotal, double dlnow, double
             // Print size info
             print_size(dlnow);
             printf("/");
-            print_size(dltotal);
+            if (dltotal > 0) {
+                print_size(dltotal);
+            } else {
+                printf("?");
+            }
             
             // Print speed and ETA
             if (progress->downloadSpeed > 0) {
@@ -145,6 +162,8 @@ void list_installed_packages(char*** packages, int* count);
 void remove_package(const char* package_name);
 void show_version();
 void show_help();
+void search_packages(const char* search_term);
+char* str_case_str(const char* haystack, const char* needle);
 
 char server_url[PATH_SIZE] = DEFAULT_SERVER_URL;
 
@@ -181,6 +200,12 @@ int main(int argc, char *argv[]) {
             return 1;
         }
         remove_package(argv[2]);
+    } else if (strcmp(argv[1], "search") == 0) {
+        if (argc < 3) {
+            printf("Error: Search term required\n");
+            return 1;
+        }
+        search_packages(argv[2]);
     } else {
         printf("Unknown command: %s\n", argv[1]);
         show_help();
@@ -804,7 +829,110 @@ void show_help() {
     printf("    \033[1;32mupgrade\033[0m           Upgrade installed packages\n");
     printf("    \033[1;32minstall\033[0m <pkg>     Install a package\n");
     printf("    \033[1;32mremove\033[0m  <pkg>     Remove an installed package\n");
+    printf("    \033[1;32msearch\033[0m  <term>    Search for packages\n");
     printf("    \033[1;32mversion\033[0m           Show version information\n");
     printf("    \033[1;32mhelp\033[0m              Show this help message\n");
     printf("\n");
+}
+
+void search_packages(const char* search_term) {
+    char path[512];
+    snprintf(path, sizeof(path), "%s/packages.db", REPO_PATH);
+    
+    FILE* db = fopen(path, "r");
+    if (!db) {
+        printf("Error: Could not open package database\n");
+        printf("Try running 'steal update' first\n");
+        return;
+    }
+    
+    printf("\n \033[1;36mSearching for packages matching: \033[1;33m%s\033[0m\n\n", search_term);
+    
+    char line[1024];
+    int found = 0;
+    
+    // Table header
+    printf(" \033[1;37m%-20s %-15s %-20s %s\033[0m\n", "Package", "Version", "Category", "Description");
+    printf(" \033[1;37m%-20s %-15s %-20s %s\033[0m\n", "-------", "-------", "--------", "-----------");
+    
+    while (fgets(line, sizeof(line), db)) {
+        if (line[0] == '#' || line[0] == '\n') continue;
+        
+        // Make a copy of the line for processing
+        char line_copy[1024];
+        strncpy(line_copy, line, sizeof(line_copy));
+        
+        char* name = strtok(line_copy, "|");
+        if (!name) continue;
+        
+        // Check if search term is in name
+        if (str_case_str(name, search_term) != NULL) {
+            char* version = strtok(NULL, "|");
+            char* category = strtok(NULL, "|");
+            char* deps = strtok(NULL, "|");
+            char* description = strtok(NULL, "|");
+            
+            // Remove newline if present in description
+            if (description) {
+                description[strcspn(description, "\n")] = 0;
+            } else {
+                description = "No description";
+            }
+            
+            // Check if package is installed
+            int installed = is_package_installed(name);
+            
+            // Color for installed packages
+            if (installed) {
+                printf(" \033[1;32m%-20s\033[0m %-15s %-20s %s\n", name, 
+                       version ? version : "unknown", 
+                       category ? category : "unknown", 
+                       description);
+            } else {
+                printf(" %-20s %-15s %-20s %s\n", name, 
+                       version ? version : "unknown", 
+                       category ? category : "unknown", 
+                       description);
+            }
+            
+            found++;
+        }
+    }
+    
+    fclose(db);
+    
+    if (found == 0) {
+        printf(" \033[1;33mNo packages found matching: %s\033[0m\n", search_term);
+    } else {
+        printf("\n \033[1;32mFound %d package(s)\033[0m\n", found);
+        printf(" \033[1;32mInstalled packages are highlighted in green\033[0m\n");
+    }
+    printf("\n");
+}
+
+// Case-insensitive substring search
+char* str_case_str(const char* haystack, const char* needle) {
+    if (!haystack || !needle) return NULL;
+    
+    size_t needle_len = strlen(needle);
+    if (needle_len == 0) return (char*)haystack;
+    
+    while (*haystack) {
+        if (tolower((unsigned char)*haystack) == tolower((unsigned char)*needle)) {
+            const char* h = haystack;
+            const char* n = needle;
+            size_t i = 0;
+            
+            while (i < needle_len && h[i] && tolower((unsigned char)h[i]) == tolower((unsigned char)n[i])) {
+                i++;
+            }
+            
+            if (i == needle_len) {
+                return (char*)haystack;
+            }
+        }
+        haystack++;
+    }
+    
+    return NULL;
 }
