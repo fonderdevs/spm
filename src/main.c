@@ -14,7 +14,7 @@
 #define REPO_PATH "/var/lib/steal/repos"
 #define INSTALL_PATH "/usr/local"
 #define PKG_DB_PATH "/var/lib/steal/pkgdb"
-#define DEFAULT_SERVER_URL "https://ftp.fonders.org/packages/"
+#define DEFAULT_SERVER_URL "http://192.168.29.150:8080/server/packages/"
 #define CONFIG_FILE "/etc/steal/config"
 #define VERSION "2.0.3"
 #define AUTHOR "parkourer10"
@@ -354,6 +354,12 @@ bool install_precompiled_package(const char* package_name) {
     char cmd[BUFFER_SIZE];
     char bin_dir[PATH_SIZE];
     
+    // Add length check at the start
+    if (strlen(package_name) > PACKAGE_NAME_MAX) {
+        printf("Error: Package name too long\n");
+        return false;
+    }
+    
     // Create package directory
     int ret = snprintf(package_path, sizeof(package_path), REPO_PATH "/%s", package_name);
     if (ret < 0 || (size_t)ret >= sizeof(package_path)) {
@@ -362,7 +368,7 @@ bool install_precompiled_package(const char* package_name) {
     }
     mkdir(package_path, 0755);
     
-    // Set up download URL for precompiled package (using .bin extension)
+    // Set up download URL for precompiled package
     ret = snprintf(download_url, sizeof(download_url), "%s/%s.bin", server_url, package_name);
     if (ret < 0 || (size_t)ret >= sizeof(download_url)) {
         printf("Error: Download URL too long\n");
@@ -398,9 +404,15 @@ bool install_precompiled_package(const char* package_name) {
     ret = snprintf(local_file, sizeof(local_file), "%s/%s.bin", package_path, package_name);
     if (ret < 0 || (size_t)ret >= sizeof(local_file)) {
         printf("Error: Local file path too long\n");
+        curl_easy_cleanup(curl);
         return false;
     }
     FILE *fp = fopen(local_file, "wb");
+    if (!fp) {
+        printf("Error: Could not create local file\n");
+        curl_easy_cleanup(curl);
+        return false;
+    }
     
     curl_easy_setopt(curl, CURLOPT_URL, download_url);
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, write_data);
@@ -408,6 +420,7 @@ bool install_precompiled_package(const char* package_name) {
     curl_easy_setopt(curl, CURLOPT_NOPROGRESS, 0L);
     curl_easy_setopt(curl, CURLOPT_PROGRESSFUNCTION, progress_callback);
     curl_easy_setopt(curl, CURLOPT_PROGRESSDATA, &progress);
+    curl_easy_setopt(curl, CURLOPT_FAILONERROR, 1L);
     
     CURLcode res = curl_easy_perform(curl);
     fclose(fp);
@@ -420,36 +433,111 @@ bool install_precompiled_package(const char* package_name) {
     
     printf("\nExtracting precompiled package...\n");
     
-    // Create bin directory if it doesn't exist
-    snprintf(bin_dir, sizeof(bin_dir), "%s/bin", INSTALL_PATH);
-    if (access(bin_dir, F_OK) != 0) {
-        mkdir(bin_dir, 0755);
-    }
+    // Create necessary directories
+    char install_bin[PATH_SIZE], install_lib[PATH_SIZE], install_share[PATH_SIZE];
+    snprintf(install_bin, sizeof(install_bin), "%s/bin", INSTALL_PATH);
+    snprintf(install_lib, sizeof(install_lib), "%s/lib", INSTALL_PATH);
+    snprintf(install_share, sizeof(install_share), "%s/share", INSTALL_PATH);
     
-    // Just extract the precompiled package to the installation directory
-    snprintf(cmd, sizeof(cmd), "cd %s && tar xf %s.bin -C %s", package_path, package_name, INSTALL_PATH);
+    mkdir(install_bin, 0755);
+    mkdir(install_lib, 0755);
+    mkdir(install_share, 0755);
+    
+    // Create temporary extraction directory
+    char temp_dir[PATH_SIZE];
+    snprintf(temp_dir, sizeof(temp_dir), "%s/temp_%s", package_path, package_name);
+    
+    // Remove any existing temp directory first
+    snprintf(cmd, sizeof(cmd), "rm -rf '%s'", temp_dir);
+    system(cmd);
+    
+    // Create fresh temp directory
+    mkdir(temp_dir, 0755);
+    
+    // Extract package with better error handling
+    snprintf(cmd, sizeof(cmd), "cd '%s' && tar xf '%s.bin' -C '%s' 2>/dev/null", 
+             package_path, package_name, temp_dir);
+    
+    printf("Extracting package...\n");
     if (system(cmd) != 0) {
-        printf("Failed to extract precompiled package\n");
-        return false;
+        printf("Failed to extract package. Trying alternative extraction method...\n");
+        
+        // Try with different tar options for large packages
+        snprintf(cmd, sizeof(cmd), "cd '%s' && tar --no-same-owner -xf '%s.bin' -C '%s' 2>/dev/null", 
+                 package_path, package_name, temp_dir);
+        
+        if (system(cmd) != 0) {
+            printf("Failed to extract package\n");
+            snprintf(cmd, sizeof(cmd), "rm -rf '%s'", temp_dir);
+            system(cmd);
+            return false;
+        }
     }
-
-    // Set up the spinner
-    struct SpinnerData spinner_data = {
-        .running = true,
-    };
-    strncpy(spinner_data.text, "Installing precompiled package...", sizeof(spinner_data.text) - 1);
-    spinner_data.text[sizeof(spinner_data.text) - 1] = '\0';
     
-    // Start spinner animation in a separate thread
-    pthread_t spinner_thread;
-    pthread_create(&spinner_thread, NULL, spinner_animation, &spinner_data);
-
-    // Wait a moment to simulate installation (precompiled packages are already installed by extraction)
-    sleep(1);
+    printf("Installing precompiled package...\n");
     
-    // Stop the spinner
-    spinner_data.running = false;
-    pthread_join(spinner_thread, NULL);
+    // Check if the package has a special installation script
+    char install_script[PATH_SIZE];
+    snprintf(install_script, sizeof(install_script), "%s/install.sh", temp_dir);
+    
+    struct stat st;
+    if (stat(install_script, &st) == 0) {
+        // Execute the installation script
+        printf("Running package installation script...\n");
+        snprintf(cmd, sizeof(cmd), "cd '%s' && chmod +x install.sh && ./install.sh '%s'", 
+                 temp_dir, INSTALL_PATH);
+        
+        if (system(cmd) != 0) {
+            printf("Installation script failed\n");
+            snprintf(cmd, sizeof(cmd), "rm -rf '%s'", temp_dir);
+            system(cmd);
+            return false;
+        }
+    } else {
+        // Move files to correct locations with better error handling
+        // First check the directory structure
+        char usr_local_dir[PATH_SIZE], usr_dir[PATH_SIZE];
+        snprintf(usr_local_dir, sizeof(usr_local_dir), "%s/usr/local", temp_dir);
+        snprintf(usr_dir, sizeof(usr_dir), "%s/usr", temp_dir);
+        
+        if (stat(usr_local_dir, &st) == 0) {
+            // Structure is temp_dir/usr/local/*
+            snprintf(cmd, sizeof(cmd), "cp -r '%s/usr/local/'* '%s/' 2>/dev/null", temp_dir, INSTALL_PATH);
+        } else if (stat(usr_dir, &st) == 0) {
+            // Structure is temp_dir/usr/*
+            snprintf(cmd, sizeof(cmd), "cp -r '%s/usr/'* '%s/' 2>/dev/null", temp_dir, INSTALL_PATH);
+        } else {
+            // Structure is temp_dir/*
+            snprintf(cmd, sizeof(cmd), "cp -r '%s/'* '%s/' 2>/dev/null", temp_dir, INSTALL_PATH);
+        }
+        
+        if (system(cmd) != 0) {
+            printf("Failed to install package files. Trying alternative method...\n");
+            
+            // Try with rsync if available
+            if (check_executable_exists("rsync")) {
+                if (stat(usr_local_dir, &st) == 0) {
+                    snprintf(cmd, sizeof(cmd), "rsync -a '%s/usr/local/' '%s/'", temp_dir, INSTALL_PATH);
+                } else if (stat(usr_dir, &st) == 0) {
+                    snprintf(cmd, sizeof(cmd), "rsync -a '%s/usr/' '%s/'", temp_dir, INSTALL_PATH);
+                } else {
+                    snprintf(cmd, sizeof(cmd), "rsync -a '%s/' '%s/'", temp_dir, INSTALL_PATH);
+                }
+                
+                if (system(cmd) != 0) {
+                    printf("Failed to install package files\n");
+                    snprintf(cmd, sizeof(cmd), "rm -rf '%s'", temp_dir);
+                    system(cmd);
+                    return false;
+                }
+            } else {
+                printf("Failed to install package files\n");
+                snprintf(cmd, sizeof(cmd), "rm -rf '%s'", temp_dir);
+                system(cmd);
+                return false;
+            }
+        }
+    }
     
     // Create installation marker and version file
     char marker_path[PATH_SIZE];
@@ -459,39 +547,31 @@ bool install_precompiled_package(const char* package_name) {
     // Get the version information
     get_package_info(package_name, version_value, NULL, NULL, NULL, NULL);
     
+    // Create steal installation directory
+    snprintf(cmd, sizeof(cmd), "mkdir -p '%s/share/steal/installed'", INSTALL_PATH);
+    system(cmd);
+    
     snprintf(marker_path, sizeof(marker_path),
             "%s/share/steal/installed/%s", INSTALL_PATH, package_name);
-    mkdir_p("%s/share/steal/installed", INSTALL_PATH);
-    if (access(marker_path, F_OK) != 0) {
-        FILE* marker = fopen(marker_path, "w");
-        if (marker) {
-            fprintf(marker, "precompiled\n");
-            fclose(marker);
-        }
+    FILE* marker = fopen(marker_path, "w");
+    if (marker) {
+        fprintf(marker, "precompiled\n");
+        fclose(marker);
     }
     
     snprintf(version_path, sizeof(version_path),
             "%s/share/steal/installed/%s.version", INSTALL_PATH, package_name);
-    if (access(version_path, F_OK) != 0) {
-        FILE* ver_file = fopen(version_path, "w");
-        if (ver_file) {
-            fprintf(ver_file, "%s\n", version_value);
-            fclose(ver_file);
-        }
+    FILE* ver_file = fopen(version_path, "w");
+    if (ver_file) {
+        fprintf(ver_file, "%s\n", version_value);
+        fclose(ver_file);
     }
     
-    // Cleanup ALL downloaded files
-    snprintf(cmd, sizeof(cmd), "rm -rf %s/*", package_path);
-    if (system(cmd) != 0) {
-        printf("Warning: Failed to clean up package files\n");
-    }
+    // Cleanup
+    snprintf(cmd, sizeof(cmd), "rm -rf '%s' '%s/%s.bin'", temp_dir, package_path, package_name);
+    system(cmd);
     
-    snprintf(cmd, sizeof(cmd), "rm -rf %s", package_path);
-    if (system(cmd) != 0) {
-        printf("Warning: Failed to remove package directory\n");
-    }
-    
-    printf("Installation of precompiled package completed successfully\n");
+    printf("Installation completed successfully\n");
     return true;
 }
 
@@ -854,28 +934,28 @@ bool get_package_info(const char* package_name, char* version, char* category, c
         if (strcmp(name, package_name) == 0) {
             // Get version
             char* ver = strtok(NULL, "|");
-            if (ver) strncpy(version, ver, 63);
+            if (ver && version) strncpy(version, ver, 63);
             
             // Get category
             char* cat = strtok(NULL, "|");
-            if (cat) strncpy(category, cat, 127);
+            if (cat && category) strncpy(category, cat, 127);
             
             // Get dependencies
             char* dependencies = strtok(NULL, "|");
-            if (dependencies && strcmp(dependencies, "-") != 0) {
+            if (dependencies && deps && dep_count && strcmp(dependencies, "-") != 0) {
                 *deps = strdup(dependencies);
                 *dep_count = 1;
                 for (char* p = dependencies; *p; p++) {
                     if (*p == ',') (*dep_count)++;
                 }
-            } else {
+            } else if (deps && dep_count) {
                 *deps = NULL;
                 *dep_count = 0;
             }
             
             // Get description
             char* desc = strtok(NULL, "|");
-            if (desc) {
+            if (desc && description) {
                 // Remove newline if present
                 desc[strcspn(desc, "\n")] = 0;
                 strncpy(description, desc, 511);
