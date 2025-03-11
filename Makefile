@@ -50,12 +50,5 @@ clean:
 	@rm -f steal *.o
 	@echo "$(GREEN)✓ Successfully cleaned files$(NC)\n"
 
-check: steal
-	@echo "$(BLUE)╭─────────────────────────────╮$(NC)"
-	@echo "$(BLUE)│$(NC)     $(CYAN)Running tests...$(NC)         $(BLUE)│$(NC)"
-	@echo "$(BLUE)╰─────────────────────────────╯$(NC)"
-	@./steal --version || echo "$(RED)✗ Test failed: --version$(NC)"
-	@echo "$(GREEN)✓ All tests passed$(NC)\n"
-
 
 .PHONY: all check_deps install uninstall clean check
