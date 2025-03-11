@@ -14,7 +14,7 @@
 #define REPO_PATH "/var/lib/steal/repos"
 #define INSTALL_PATH "/usr/local"
 #define PKG_DB_PATH "/var/lib/steal/pkgdb"
-#define DEFAULT_SERVER_URL "https://ftp.fonders.org/packages/"
+#define DEFAULT_SERVER_URL "http://192.168.29.150:8090/server/packages/"
 #define CONFIG_FILE "/etc/steal/config"
 #define VERSION "2.0.3"
 #define AUTHOR "parkourer10"
@@ -45,7 +45,7 @@ struct ProgressData {
 
 struct SpinnerData {
     bool running;
-    const char* text;
+    char text[256];  // Changed from const char* to fixed buffer
 };
 
 void* spinner_animation(void* arg) {
@@ -436,8 +436,9 @@ bool install_precompiled_package(const char* package_name) {
     // Set up the spinner
     struct SpinnerData spinner_data = {
         .running = true,
-        .text = "Installing precompiled package..."
     };
+    strncpy(spinner_data.text, "Installing precompiled package...", sizeof(spinner_data.text) - 1);
+    spinner_data.text[sizeof(spinner_data.text) - 1] = '\0';
     
     // Start spinner animation in a separate thread
     pthread_t spinner_thread;
@@ -675,8 +676,9 @@ void install_package(const char* package_name) {
     // Set up the spinner
     struct SpinnerData spinner_data = {
         .running = true,
-        .text = "Installing package..."
     };
+    strncpy(spinner_data.text, "Installing package...", sizeof(spinner_data.text) - 1);
+    spinner_data.text[sizeof(spinner_data.text) - 1] = '\0';
     
     // Start spinner animation in a separate thread
     pthread_t spinner_thread;
