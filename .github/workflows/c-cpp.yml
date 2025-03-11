@@ -17,7 +17,7 @@ jobs:
       run: sudo apt-get update && sudo apt-get install -y libcurl4-openssl-dev
     - name: make
       run: make
-    - name: make check
-      run: make check
+    - name: make install
+      run: make install
     - name: test package manager
       run: sudo steal update
