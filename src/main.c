@@ -14,7 +14,7 @@
 #define REPO_PATH "/var/lib/steal/repos"
 #define INSTALL_PATH "/usr/local"
 #define PKG_DB_PATH "/var/lib/steal/pkgdb"
-#define DEFAULT_SERVER_URL "http://192.168.29.150:8090/server/packages/"
+#define DEFAULT_SERVER_URL "https://ftp.fonders.org/packages/"
 #define CONFIG_FILE "/etc/steal/config"
 #define VERSION "2.0.3"
 #define AUTHOR "parkourer10"
@@ -26,6 +26,12 @@
 #define KB (1024)
 #define MB (1024 * KB)
 #define GB (1024 * MB)
+#define PRECOMPILED_FLAG "precompiled" // Flag to indicate precompiled packages
+
+// Define DT_REG if not available
+#ifndef DT_REG
+#define DT_REG 8
+#endif
 
 struct ProgressData {
     double lastUpdateTime;
@@ -164,6 +170,8 @@ void show_version();
 void show_help();
 void search_packages(const char* search_term);
 char* str_case_str(const char* haystack, const char* needle);
+void mkdir_p(const char* format, const char* prefix);
+bool install_precompiled_package(const char* package_name);
 
 char server_url[PATH_SIZE] = DEFAULT_SERVER_URL;
 
@@ -339,6 +347,167 @@ void upgrade_packages() {
     }
 }
 
+bool install_precompiled_package(const char* package_name) {
+    char package_path[PATH_SIZE];
+    char download_url[URL_SIZE];
+    char local_file[PATH_SIZE];
+    char cmd[BUFFER_SIZE];
+    char bin_dir[PATH_SIZE];
+    
+    // Create package directory
+    int ret = snprintf(package_path, sizeof(package_path), REPO_PATH "/%s", package_name);
+    if (ret < 0 || (size_t)ret >= sizeof(package_path)) {
+        printf("Error: Package path too long\n");
+        return false;
+    }
+    mkdir(package_path, 0755);
+    
+    // Set up download URL for precompiled package (using .bin extension)
+    ret = snprintf(download_url, sizeof(download_url), "%s/%s.bin", server_url, package_name);
+    if (ret < 0 || (size_t)ret >= sizeof(download_url)) {
+        printf("Error: Download URL too long\n");
+        return false;
+    }
+    
+    // Initialize CURL
+    CURL *curl = curl_easy_init();
+    if (!curl) {
+        printf("Failed to initialize download\n");
+        return false;
+    }
+    
+    // Get terminal width for progress bar
+    struct winsize w;
+    ioctl(STDOUT_FILENO, TIOCGWINSZ, &w);
+    
+    // Set up progress data
+    struct ProgressData progress = {
+        .lastUpdateTime = clock() / (double)CLOCKS_PER_SEC,
+        .downloadSpeed = 0,
+        .estimatedTime = 0,
+        .totalSize = 0,
+        .downloaded = 0,
+        .lastPercent = -1,
+        .termWidth = w.ws_col
+    };
+
+    // Download the precompiled package
+    printf("Downloading precompiled package '%s'...\n", package_name);
+    
+    // Set up local file path
+    ret = snprintf(local_file, sizeof(local_file), "%s/%s.bin", package_path, package_name);
+    if (ret < 0 || (size_t)ret >= sizeof(local_file)) {
+        printf("Error: Local file path too long\n");
+        return false;
+    }
+    FILE *fp = fopen(local_file, "wb");
+    
+    curl_easy_setopt(curl, CURLOPT_URL, download_url);
+    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, write_data);
+    curl_easy_setopt(curl, CURLOPT_WRITEDATA, fp);
+    curl_easy_setopt(curl, CURLOPT_NOPROGRESS, 0L);
+    curl_easy_setopt(curl, CURLOPT_PROGRESSFUNCTION, progress_callback);
+    curl_easy_setopt(curl, CURLOPT_PROGRESSDATA, &progress);
+    
+    CURLcode res = curl_easy_perform(curl);
+    fclose(fp);
+    curl_easy_cleanup(curl);
+    
+    if (res != CURLE_OK) {
+        printf("\nFailed to download precompiled package: %s\n", curl_easy_strerror(res));
+        return false;
+    }
+    
+    printf("\nExtracting precompiled package...\n");
+    
+    // Create bin directory if it doesn't exist
+    snprintf(bin_dir, sizeof(bin_dir), "%s/bin", INSTALL_PATH);
+    if (access(bin_dir, F_OK) != 0) {
+        mkdir(bin_dir, 0755);
+    }
+    
+    // Just extract the precompiled package to the installation directory
+    snprintf(cmd, sizeof(cmd), "cd %s && tar xf %s.bin -C %s", package_path, package_name, INSTALL_PATH);
+    if (system(cmd) != 0) {
+        printf("Failed to extract precompiled package\n");
+        return false;
+    }
+
+    // Set up the spinner
+    struct SpinnerData spinner_data = {
+        .running = true,
+        .text = "Installing precompiled package..."
+    };
+    
+    // Start spinner animation in a separate thread
+    pthread_t spinner_thread;
+    pthread_create(&spinner_thread, NULL, spinner_animation, &spinner_data);
+
+    // Wait a moment to simulate installation (precompiled packages are already installed by extraction)
+    sleep(1);
+    
+    // Stop the spinner
+    spinner_data.running = false;
+    pthread_join(spinner_thread, NULL);
+    
+    // Create installation marker and version file
+    char marker_path[PATH_SIZE];
+    char version_path[PATH_SIZE];
+    char version_value[64] = {0};
+    
+    // Get the version information
+    get_package_info(package_name, version_value, NULL, NULL, NULL, NULL);
+    
+    snprintf(marker_path, sizeof(marker_path),
+            "%s/share/steal/installed/%s", INSTALL_PATH, package_name);
+    mkdir_p("%s/share/steal/installed", INSTALL_PATH);
+    if (access(marker_path, F_OK) != 0) {
+        FILE* marker = fopen(marker_path, "w");
+        if (marker) {
+            fprintf(marker, "precompiled\n");
+            fclose(marker);
+        }
+    }
+    
+    snprintf(version_path, sizeof(version_path),
+            "%s/share/steal/installed/%s.version", INSTALL_PATH, package_name);
+    if (access(version_path, F_OK) != 0) {
+        FILE* ver_file = fopen(version_path, "w");
+        if (ver_file) {
+            fprintf(ver_file, "%s\n", version_value);
+            fclose(ver_file);
+        }
+    }
+    
+    // Cleanup ALL downloaded files
+    snprintf(cmd, sizeof(cmd), "rm -rf %s/*", package_path);
+    if (system(cmd) != 0) {
+        printf("Warning: Failed to clean up package files\n");
+    }
+    
+    snprintf(cmd, sizeof(cmd), "rm -rf %s", package_path);
+    if (system(cmd) != 0) {
+        printf("Warning: Failed to remove package directory\n");
+    }
+    
+    printf("Installation of precompiled package completed successfully\n");
+    return true;
+}
+
+// Helper function to create directory tree
+void mkdir_p(const char* format, const char* prefix) {
+    char path[PATH_SIZE];
+    snprintf(path, sizeof(path), format, prefix);
+    
+    char* p = path;
+    while ((p = strchr(p + 1, '/')) != NULL) {
+        *p = '\0';
+        mkdir(path, 0755);
+        *p = '/';
+    }
+    mkdir(path, 0755);
+}
+
 void install_package(const char* package_name) {
     // Add length check at the start
     if (strlen(package_name) > PACKAGE_NAME_MAX) {
@@ -364,6 +533,12 @@ void install_package(const char* package_name) {
     printf("Category: %s\n", category);
     printf("Description: %s\n\n", description);
     
+    // Check if this is a precompiled package
+    bool is_precompiled = (strstr(category, PRECOMPILED_FLAG) != NULL);
+    if (is_precompiled) {
+        printf("This is a precompiled package.\n");
+    }
+    
     // Ask for confirmation
     printf("Do you want to install this package? [Y/n] ");
     char response = getchar();
@@ -372,6 +547,17 @@ void install_package(const char* package_name) {
     
     if (response != 'Y' && response != 'y') {
         printf("Installation cancelled.\n");
+        if (deps) free(deps);
+        return;
+    }
+
+    // If precompiled, use the specialized installation function
+    if (is_precompiled) {
+        if (install_precompiled_package(package_name)) {
+            printf("Precompiled package '%s' installed successfully.\n", package_name);
+        } else {
+            printf("Failed to install precompiled package '%s'.\n", package_name);
+        }
         if (deps) free(deps);
         return;
     }
@@ -744,8 +930,21 @@ void list_installed_packages(char*** packages, int* count) {
     struct dirent* entry;
     *count = 0;
     while ((entry = readdir(dir)) != NULL) {
-        if (entry->d_type == DT_REG) {  // Regular file
-            (*count)++;
+        // Skip . and .. directory entries
+        if (strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0) {
+            continue;
+        }
+        
+        // Check if it's a regular file using stat instead of d_type
+        char file_path[PATH_SIZE];
+        struct stat st;
+        snprintf(file_path, sizeof(file_path), "%s/%s", path, entry->d_name);
+        
+        if (stat(file_path, &st) == 0 && S_ISREG(st.st_mode)) {
+            // Skip .version files
+            if (strstr(entry->d_name, ".version") == NULL) {
+                (*count)++;
+            }
         }
     }
     
@@ -758,9 +957,22 @@ void list_installed_packages(char*** packages, int* count) {
     // Fill array
     int i = 0;
     while ((entry = readdir(dir)) != NULL) {
-        if (entry->d_type == DT_REG) {
-            (*packages)[i] = strdup(entry->d_name);
-            i++;
+        // Skip . and .. directory entries
+        if (strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0) {
+            continue;
+        }
+        
+        // Check if it's a regular file using stat instead of d_type
+        char file_path[PATH_SIZE];
+        struct stat st;
+        snprintf(file_path, sizeof(file_path), "%s/%s", path, entry->d_name);
+        
+        if (stat(file_path, &st) == 0 && S_ISREG(st.st_mode)) {
+            // Skip .version files
+            if (strstr(entry->d_name, ".version") == NULL) {
+                (*packages)[i] = strdup(entry->d_name);
+                i++;
+            }
         }
     }
     
