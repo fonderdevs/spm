@@ -352,7 +352,6 @@ bool install_precompiled_package(const char* package_name) {
     char download_url[URL_SIZE];
     char local_file[PATH_SIZE];
     char cmd[BUFFER_SIZE];
-    char bin_dir[PATH_SIZE];
     
     // Add length check at the start
     if (strlen(package_name) > PACKAGE_NAME_MAX) {
@@ -433,16 +432,6 @@ bool install_precompiled_package(const char* package_name) {
     
     printf("\nExtracting precompiled package...\n");
     
-    // Create necessary directories
-    char install_bin[PATH_SIZE], install_lib[PATH_SIZE], install_share[PATH_SIZE];
-    snprintf(install_bin, sizeof(install_bin), "%s/bin", INSTALL_PATH);
-    snprintf(install_lib, sizeof(install_lib), "%s/lib", INSTALL_PATH);
-    snprintf(install_share, sizeof(install_share), "%s/share", INSTALL_PATH);
-    
-    mkdir(install_bin, 0755);
-    mkdir(install_lib, 0755);
-    mkdir(install_share, 0755);
-    
     // Create temporary extraction directory
     char temp_dir[PATH_SIZE];
     snprintf(temp_dir, sizeof(temp_dir), "%s/temp_%s", package_path, package_name);
@@ -454,102 +443,67 @@ bool install_precompiled_package(const char* package_name) {
     // Create fresh temp directory
     mkdir(temp_dir, 0755);
     
-    // Extract package with better error handling
+    // Extract package
     snprintf(cmd, sizeof(cmd), "cd '%s' && tar xf '%s.bin' -C '%s' 2>/dev/null", 
              package_path, package_name, temp_dir);
     
-    printf("Extracting package...\n");
     if (system(cmd) != 0) {
-        printf("Failed to extract package. Trying alternative extraction method...\n");
-        
-        // Try with different tar options for large packages
-        snprintf(cmd, sizeof(cmd), "cd '%s' && tar --no-same-owner -xf '%s.bin' -C '%s' 2>/dev/null", 
-                 package_path, package_name, temp_dir);
-        
-        if (system(cmd) != 0) {
-            printf("Failed to extract package\n");
-            snprintf(cmd, sizeof(cmd), "rm -rf '%s'", temp_dir);
-            system(cmd);
-            return false;
-        }
+        printf("Failed to extract package\n");
+        snprintf(cmd, sizeof(cmd), "rm -rf '%s'", temp_dir);
+        system(cmd);
+        return false;
     }
     
-    printf("Installing precompiled package...\n");
+    // Create necessary directories
+    mkdir_p("%s/bin", INSTALL_PATH);
+    mkdir_p("%s/lib", INSTALL_PATH);
+    mkdir_p("%s/share", INSTALL_PATH);
+    mkdir_p("%s/share/steal/installed", INSTALL_PATH);
     
-    // Check if the package has a special installation script
-    char install_script[PATH_SIZE];
-    snprintf(install_script, sizeof(install_script), "%s/install.sh", temp_dir);
+    // Move files to their destinations
+    printf("Installing files...\n");
     
-    struct stat st;
-    if (stat(install_script, &st) == 0) {
-        // Execute the installation script
-        printf("Running package installation script...\n");
-        snprintf(cmd, sizeof(cmd), "cd '%s' && chmod +x install.sh && ./install.sh '%s'", 
-                 temp_dir, INSTALL_PATH);
-        
-        if (system(cmd) != 0) {
-            printf("Installation script failed\n");
-            snprintf(cmd, sizeof(cmd), "rm -rf '%s'", temp_dir);
-            system(cmd);
-            return false;
-        }
-    } else {
-        // Move files to correct locations with better error handling
-        // First check the directory structure
-        char usr_local_dir[PATH_SIZE], usr_dir[PATH_SIZE];
-        snprintf(usr_local_dir, sizeof(usr_local_dir), "%s/usr/local", temp_dir);
-        snprintf(usr_dir, sizeof(usr_dir), "%s/usr", temp_dir);
-        
-        if (stat(usr_local_dir, &st) == 0) {
-            // Structure is temp_dir/usr/local/*
-            snprintf(cmd, sizeof(cmd), "cp -r '%s/usr/local/'* '%s/' 2>/dev/null", temp_dir, INSTALL_PATH);
-        } else if (stat(usr_dir, &st) == 0) {
-            // Structure is temp_dir/usr/*
-            snprintf(cmd, sizeof(cmd), "cp -r '%s/usr/'* '%s/' 2>/dev/null", temp_dir, INSTALL_PATH);
-        } else {
-            // Structure is temp_dir/*
-            snprintf(cmd, sizeof(cmd), "cp -r '%s/'* '%s/' 2>/dev/null", temp_dir, INSTALL_PATH);
-        }
-        
-        if (system(cmd) != 0) {
-            printf("Failed to install package files. Trying alternative method...\n");
-            
-            // Try with rsync if available
-            if (check_executable_exists("rsync")) {
-                if (stat(usr_local_dir, &st) == 0) {
-                    snprintf(cmd, sizeof(cmd), "rsync -a '%s/usr/local/' '%s/'", temp_dir, INSTALL_PATH);
-                } else if (stat(usr_dir, &st) == 0) {
-                    snprintf(cmd, sizeof(cmd), "rsync -a '%s/usr/' '%s/'", temp_dir, INSTALL_PATH);
-                } else {
-                    snprintf(cmd, sizeof(cmd), "rsync -a '%s/' '%s/'", temp_dir, INSTALL_PATH);
-                }
-                
-                if (system(cmd) != 0) {
-                    printf("Failed to install package files\n");
-                    snprintf(cmd, sizeof(cmd), "rm -rf '%s'", temp_dir);
-                    system(cmd);
-                    return false;
-                }
-            } else {
-                printf("Failed to install package files\n");
-                snprintf(cmd, sizeof(cmd), "rm -rf '%s'", temp_dir);
-                system(cmd);
-                return false;
+    // First try to copy everything from usr/ if it exists
+    snprintf(cmd, sizeof(cmd), "if [ -d '%s/usr' ]; then cp -r '%s/usr/'* '%s/'; else cp -r '%s/'* '%s/'; fi",
+             temp_dir, temp_dir, INSTALL_PATH, temp_dir, INSTALL_PATH);
+    
+    if (system(cmd) != 0) {
+        printf("Failed to install package files\n");
+        snprintf(cmd, sizeof(cmd), "rm -rf '%s'", temp_dir);
+        system(cmd);
+        return false;
+    }
+    
+    // Read metadata from the package
+    char metadata_path[PATH_SIZE];
+    snprintf(metadata_path, sizeof(metadata_path), 
+             "%s/usr/share/steal/metadata/%s/info", temp_dir, package_name);
+    
+    char version[64] = {0};
+    char category[128] = {0};
+    char description[512] = {0};
+    
+    FILE* metadata = fopen(metadata_path, "r");
+    if (metadata) {
+        char line[512];
+        while (fgets(line, sizeof(line), metadata)) {
+            if (strncmp(line, "version=", 8) == 0) {
+                strncpy(version, line + 8, sizeof(version) - 1);
+                version[strcspn(version, "\n")] = 0;
+            } else if (strncmp(line, "category=", 9) == 0) {
+                strncpy(category, line + 9, sizeof(category) - 1);
+                category[strcspn(category, "\n")] = 0;
+            } else if (strncmp(line, "description=", 12) == 0) {
+                strncpy(description, line + 12, sizeof(description) - 1);
+                description[strcspn(description, "\n")] = 0;
             }
         }
+        fclose(metadata);
     }
     
     // Create installation marker and version file
     char marker_path[PATH_SIZE];
     char version_path[PATH_SIZE];
-    char version_value[64] = {0};
-    
-    // Get the version information
-    get_package_info(package_name, version_value, NULL, NULL, NULL, NULL);
-    
-    // Create steal installation directory
-    snprintf(cmd, sizeof(cmd), "mkdir -p '%s/share/steal/installed'", INSTALL_PATH);
-    system(cmd);
     
     snprintf(marker_path, sizeof(marker_path),
             "%s/share/steal/installed/%s", INSTALL_PATH, package_name);
@@ -563,7 +517,7 @@ bool install_precompiled_package(const char* package_name) {
             "%s/share/steal/installed/%s.version", INSTALL_PATH, package_name);
     FILE* ver_file = fopen(version_path, "w");
     if (ver_file) {
-        fprintf(ver_file, "%s\n", version_value);
+        fprintf(ver_file, "%s\n", version);
         fclose(ver_file);
     }
     
@@ -572,6 +526,11 @@ bool install_precompiled_package(const char* package_name) {
     system(cmd);
     
     printf("Installation completed successfully\n");
+    printf("Package: %s\n", package_name);
+    printf("Version: %s\n", version);
+    printf("Category: %s\n", category);
+    printf("Description: %s\n", description);
+    
     return true;
 }
 
