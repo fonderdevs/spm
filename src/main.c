@@ -360,19 +360,11 @@ bool install_precompiled_package(const char* package_name) {
     }
     
     // Create package directory
-    int ret = snprintf(package_path, sizeof(package_path), REPO_PATH "/%s", package_name);
-    if (ret < 0 || (size_t)ret >= sizeof(package_path)) {
-        printf("Error: Package path too long\n");
-        return false;
-    }
+    snprintf(package_path, sizeof(package_path), "%s/%s", REPO_PATH, package_name);
     mkdir(package_path, 0755);
     
     // Set up download URL for precompiled package
-    ret = snprintf(download_url, sizeof(download_url), "%s/%s.bin", server_url, package_name);
-    if (ret < 0 || (size_t)ret >= sizeof(download_url)) {
-        printf("Error: Download URL too long\n");
-        return false;
-    }
+    snprintf(download_url, sizeof(download_url), "%s/%s.bin", server_url, package_name);
     
     // Initialize CURL
     CURL *curl = curl_easy_init();
@@ -400,12 +392,7 @@ bool install_precompiled_package(const char* package_name) {
     printf("Downloading precompiled package '%s'...\n", package_name);
     
     // Set up local file path
-    ret = snprintf(local_file, sizeof(local_file), "%s/%s.bin", package_path, package_name);
-    if (ret < 0 || (size_t)ret >= sizeof(local_file)) {
-        printf("Error: Local file path too long\n");
-        curl_easy_cleanup(curl);
-        return false;
-    }
+    snprintf(local_file, sizeof(local_file), "%s/%s.bin", package_path, package_name);
     FILE *fp = fopen(local_file, "wb");
     if (!fp) {
         printf("Error: Could not create local file\n");
@@ -432,56 +419,33 @@ bool install_precompiled_package(const char* package_name) {
     
     printf("\nExtracting precompiled package...\n");
     
-    // Create temporary extraction directory
-    char temp_dir[PATH_SIZE];
-    snprintf(temp_dir, sizeof(temp_dir), "%s/temp_%s", package_path, package_name);
-    
-    // Remove any existing temp directory first
-    snprintf(cmd, sizeof(cmd), "rm -rf '%s'", temp_dir);
-    system(cmd);
-    
-    // Create fresh temp directory
-    mkdir(temp_dir, 0755);
-    
-    // Extract package
-    snprintf(cmd, sizeof(cmd), "cd '%s' && tar xf '%s.bin' -C '%s' 2>/dev/null", 
-             package_path, package_name, temp_dir);
-    
-    if (system(cmd) != 0) {
-        printf("Failed to extract package\n");
-        snprintf(cmd, sizeof(cmd), "rm -rf '%s'", temp_dir);
-        system(cmd);
-        return false;
-    }
-    
-    // Create necessary directories
+    // Create necessary directories first
     mkdir_p("%s/bin", INSTALL_PATH);
     mkdir_p("%s/lib", INSTALL_PATH);
     mkdir_p("%s/share", INSTALL_PATH);
     mkdir_p("%s/share/steal/installed", INSTALL_PATH);
     
-    // Move files to their destinations
-    printf("Installing files...\n");
-    
-    // First try to copy everything from usr/ if it exists
-    snprintf(cmd, sizeof(cmd), "if [ -d '%s/usr' ]; then cp -r '%s/usr/'* '%s/'; else cp -r '%s/'* '%s/'; fi",
-             temp_dir, temp_dir, INSTALL_PATH, temp_dir, INSTALL_PATH);
-    
+    // Create metadata directory
+    char metadata_dir[PATH_SIZE];
+    snprintf(metadata_dir, sizeof(metadata_dir), "%s/share/steal/metadata/%s", INSTALL_PATH, package_name);
+    mkdir_p("%s", metadata_dir);
+
+    // Extract directly to root (our .bin packages are already structured correctly)
+    snprintf(cmd, sizeof(cmd), "cd / && tar xf '%s'", local_file);
     if (system(cmd) != 0) {
-        printf("Failed to install package files\n");
-        snprintf(cmd, sizeof(cmd), "rm -rf '%s'", temp_dir);
-        system(cmd);
+        printf("Failed to extract package\n");
         return false;
     }
     
     // Read metadata from the package
     char metadata_path[PATH_SIZE];
     snprintf(metadata_path, sizeof(metadata_path), 
-             "%s/usr/share/steal/metadata/%s/info", temp_dir, package_name);
+             "/usr/share/steal/metadata/%s/info", package_name);
     
     char version[64] = {0};
     char category[128] = {0};
     char description[512] = {0};
+    char deps[512] = {0};
     
     FILE* metadata = fopen(metadata_path, "r");
     if (metadata) {
@@ -496,6 +460,9 @@ bool install_precompiled_package(const char* package_name) {
             } else if (strncmp(line, "description=", 12) == 0) {
                 strncpy(description, line + 12, sizeof(description) - 1);
                 description[strcspn(description, "\n")] = 0;
+            } else if (strncmp(line, "dependencies=", 13) == 0) {
+                strncpy(deps, line + 13, sizeof(deps) - 1);
+                deps[strcspn(deps, "\n")] = 0;
             }
         }
         fclose(metadata);
@@ -521,8 +488,8 @@ bool install_precompiled_package(const char* package_name) {
         fclose(ver_file);
     }
     
-    // Cleanup
-    snprintf(cmd, sizeof(cmd), "rm -rf '%s' '%s/%s.bin'", temp_dir, package_path, package_name);
+    // Cleanup downloaded package
+    snprintf(cmd, sizeof(cmd), "rm -f '%s'", local_file);
     system(cmd);
     
     printf("Installation completed successfully\n");
@@ -530,6 +497,9 @@ bool install_precompiled_package(const char* package_name) {
     printf("Version: %s\n", version);
     printf("Category: %s\n", category);
     printf("Description: %s\n", description);
+    if (deps[0] != '\0') {
+        printf("Dependencies: %s\n", deps);
+    }
     
     return true;
 }
