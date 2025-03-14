@@ -16,7 +16,7 @@
 #define HTTP_PORT 80
 #define HTTPS_PORT 443
 
-static char* extract_host_from_url(const char* url, char* host, size_t host_size) {
+static char* extract_host_from_url(const char* url, char* host, size_t host_size, char* port, size_t port_size) {
     const char* start = strstr(url, "://");
     if (!start) return NULL;
     
@@ -24,11 +24,33 @@ static char* extract_host_from_url(const char* url, char* host, size_t host_size
     const char* end = strchr(start, '/');
     if (!end) end = start + strlen(start);
     
-    size_t len = end - start;
-    if (len >= host_size) return NULL;
+    strncpy(port, "80", port_size);
+    port[port_size-1] = '\0';
+        
+    const char* port_start = strchr(start, ':');
+    if (port_start && port_start < end) {
+        size_t host_len = port_start - start;
+        if (host_len >= host_size) return NULL;
+        
+        strncpy(host, start, host_len);
+        host[host_len] = '\0';
+        
+       
+        port_start++; 
+        size_t port_len = end - port_start;
+        if (port_len >= port_size) return NULL;
+        
+        strncpy(port, port_start, port_len);
+        port[port_len] = '\0';
+    } else {
+       
+        size_t len = end - start;
+        if (len >= host_size) return NULL;
+        
+        strncpy(host, start, len);
+        host[len] = '\0';
+    }
     
-    strncpy(host, start, len);
-    host[len] = '\0';
     return (char*)end;
 }
 
@@ -66,7 +88,7 @@ void network_cleanup(void) {
     //huh?
 }
 
-static download_result_t handle_download(const char* host, const char* path, const char* local_path, 
+static download_result_t handle_download(const char* host, const char* port, const char* path, const char* local_path, 
                                       progress_callback_t progress_cb, void* userdata) {
     download_result_t result = {false, ""};
     int sockfd;
@@ -79,7 +101,7 @@ static download_result_t handle_download(const char* host, const char* path, con
     hints.ai_family = AF_UNSPEC;
     hints.ai_socktype = SOCK_STREAM;
 
-    int rv = getaddrinfo(host, "80", &hints, &servinfo);
+    int rv = getaddrinfo(host, port, &hints, &servinfo);
     if (rv != 0) {
         snprintf(result.error_message, sizeof(result.error_message), 
                 "Failed to resolve host: %s", gai_strerror(rv));
@@ -114,7 +136,6 @@ static download_result_t handle_download(const char* host, const char* path, con
              "Connection: close\r\n\r\n",
              path, host, "2.0.4");
     
-
     if (send(sockfd, request, strlen(request), 0) == -1) {
         snprintf(result.error_message, sizeof(result.error_message), 
                 "Failed to send request");
@@ -152,7 +173,6 @@ static download_result_t handle_download(const char* host, const char* path, con
                 header_len += header_part;
                 header[header_len] = '\0';
                 
-               
                 if (!parse_http_header(header, &status_code, &content_length)) {
                     snprintf(result.error_message, sizeof(result.error_message), 
                             "Failed to parse HTTP header");
@@ -199,25 +219,27 @@ download_result_t download_file(const char* url, const char* local_path,
                               progress_callback_t progress_cb, void* userdata) {
     download_result_t result = {false, ""};
     char host[256];
+    char port[16];
     
     char* path = extract_path_from_url(url);
-    if (!path || !extract_host_from_url(url, host, sizeof(host))) {
+    if (!path || !extract_host_from_url(url, host, sizeof(host), port, sizeof(port))) {
         snprintf(result.error_message, sizeof(result.error_message), 
                 "Invalid URL format");
         free(path);
         return result;
     }
     
-    result = handle_download(host, path, local_path, progress_cb, userdata);
+    result = handle_download(host, port, path, local_path, progress_cb, userdata);
     free(path);
     return result;
 }
 
 bool is_url_reachable(const char* url) {
     char host[256];
+    char port[16];
     struct addrinfo hints, *servinfo;
     
-    if (!extract_host_from_url(url, host, sizeof(host))) {
+    if (!extract_host_from_url(url, host, sizeof(host), port, sizeof(port))) {
         return false;
     }
     
@@ -225,7 +247,7 @@ bool is_url_reachable(const char* url) {
     hints.ai_family = AF_UNSPEC;
     hints.ai_socktype = SOCK_STREAM;
     
-    if (getaddrinfo(host, "80", &hints, &servinfo) != 0) {
+    if (getaddrinfo(host, port, &hints, &servinfo) != 0) {
         return false;
     }
     
