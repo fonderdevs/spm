@@ -1,9 +1,18 @@
 CC = gcc
-CFLAGS = -O2 -Wall -Wextra
-LDFLAGS = -lcurl -pthread
+CFLAGS = -O2 -Wall -Wextra -I$(SRC_DIR)/include
+LDFLAGS = -pthread
 PREFIX = /usr
 INSTALL_DIRS = $(PREFIX)/bin /var/lib/steal/repos /etc/steal /usr/local/share/steal/installed
 SRC_DIR = src
+
+# Source files
+SRCS = $(wildcard $(SRC_DIR)/*.c) \
+       $(wildcard $(SRC_DIR)/network/*.c) \
+       $(wildcard $(SRC_DIR)/utils/*.c) \
+       $(wildcard $(SRC_DIR)/core/*.c)
+
+# Object files
+OBJS = $(SRCS:.c=.o)
 
 # ANSI color codes
 BLUE = \033[1;34m
@@ -13,17 +22,17 @@ CYAN = \033[1;36m
 RED = \033[1;31m
 NC = \033[0m
 
-# Check for required development packages
-CHECK_CURL := $(shell pkg-config --exists libcurl && echo "yes" || echo "no")
+all: steal
 
-all: check_deps steal
-
-steal: $(SRC_DIR)/main.c
+steal: $(OBJS)
 	@echo "$(BLUE)╭─────────────────────────────╮$(NC)"
 	@echo "$(BLUE)│$(NC)    $(CYAN)Compiling steal...$(NC)        $(BLUE)│$(NC)"
 	@echo "$(BLUE)╰─────────────────────────────╯$(NC)"
-	@$(CC) $(CFLAGS) -o $@ $< $(LDFLAGS)
+	@$(CC) $(OBJS) -o $@ $(LDFLAGS)
 	@echo "$(GREEN)✓ Successfully compiled steal$(NC)\n"
+
+%.o: %.c
+	@$(CC) $(CFLAGS) -c $< -o $@
 
 install: steal
 	@echo "$(BLUE)╭─────────────────────────────╮$(NC)"
@@ -47,8 +56,7 @@ clean:
 	@echo "$(BLUE)╭─────────────────────────────╮$(NC)"
 	@echo "$(BLUE)│$(NC)     $(CYAN)Cleaning files...$(NC)        $(BLUE)│$(NC)"
 	@echo "$(BLUE)╰─────────────────────────────╯$(NC)"
-	@rm -f steal *.o
+	@rm -f steal $(OBJS)
 	@echo "$(GREEN)✓ Successfully cleaned files$(NC)\n"
 
-
-.PHONY: all check_deps install uninstall clean check
+.PHONY: all install uninstall clean

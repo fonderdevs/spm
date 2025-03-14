@@ -3,7 +3,7 @@
 # 🚀 Steal Package Manager 🚀
 ### A lightweight package manager for FonderOS
 
-![Version](https://img.shields.io/badge/version-2.0.3-blue)
+![Version](https://img.shields.io/badge/version-2.0.4-blue)
 ![Author](https://img.shields.io/badge/Author-parkourer10-purple)
 
 </div>
@@ -47,49 +47,57 @@ steal install <package>
 steal remove <package>
 ```
 
-#### Update a package:
+#### Update package repositories:
 
 ```bash
-steal update <package>
+steal update
 ```
 
-#### List installed packages:
+#### Upgrade installed packages:
 
 ```bash
-steal list
+steal upgrade
 ```
 
-etc.
+#### Search for packages:
 
-## 📦 Package Format (for developers)
-
-Steal packages are simple `.tar.xz` archives containing a `.install` file and a directory to having the package files.
-
-#### .install
-
-The `.install` file is a simple bash script that will be executed to install the package.
-
-EXAMPLE:
 ```bash
-#!/bin/bash
-
-#!/bin/sh
-
-# Navigate to source directory
-cd xx
-
-# Compile package
-echo "Compiling package..."
-make
-
-# Install package
-echo "Installing package..."
-make install PREFIX=/usr
-
-ln -sf /usr/local/bin/xx /usr/bin/xx
-
-echo "Package installed successfully"
+steal search <term>
 ```
+
+#### Switch between versions of a package:
+
+```bash
+steal switch-version <package> <version>
+```
+
+## 🔄 Managing Multiple Package Versions
+
+Steal supports managing multiple versions of the same package (like Java 8, Java 17, Java 21) and easily switching between them.
+
+### Example: Managing Java Versions
+
+If you have multiple Java versions installed:
+
+```bash
+# Install different Java versions
+steal install java8
+steal install java17
+steal install java21
+
+# Switch to Java 8 as the default
+steal switch-version java 8
+
+# Later, switch to Java 21
+steal switch-version java 21
+```
+
+When you switch versions:
+- Steal creates symbolic links from the specific version to the generic name
+- Applications that use the generic command (e.g., `java`) will use your selected version
+- You can keep multiple versions installed simultaneously
+- No need to manually modify PATH or environment variables
+
 
 ## 📦 License
 
