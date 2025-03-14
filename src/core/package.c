@@ -146,6 +146,7 @@ void install_package(const char* package_name) {
         return;
     }
 
+    struct winsize w;
     ioctl(STDOUT_FILENO, TIOCGWINSZ, &w);
     struct ProgressData progress = {
         .lastUpdateTime = clock() / (double)CLOCKS_PER_SEC,
@@ -276,6 +277,7 @@ bool install_precompiled_package(const char* package_name) {
         return false;
     }
     
+    struct winsize w;
     ioctl(STDOUT_FILENO, TIOCGWINSZ, &w);
     
     struct ProgressData progress = {
@@ -368,7 +370,7 @@ bool install_precompiled_package(const char* package_name) {
     }
     
     snprintf(cmd, sizeof(cmd), "rm -f '%s'", local_file);
-    system(cmd);
+    (void)system(cmd);
     
     printf("Installation completed successfully\n");
     printf("Package: %s\n", package_name);
@@ -555,6 +557,7 @@ void list_installed_packages(char*** packages, int* count) {
         return;
     }
     
+    struct dirent* entry;
     *count = 0;
     while ((entry = readdir(dir)) != NULL) {
         if (strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0) {
@@ -698,7 +701,7 @@ void search_packages(const char* search_term) {
         if (str_case_str(name, search_term) != NULL) {
             char* version = strtok(NULL, "|");
             char* category = strtok(NULL, "|");
-            char* deps = strtok(NULL, "|");
+            strtok(NULL, "|"); // Skip dependencies
             char* description = strtok(NULL, "|");
             
             if (description) {
@@ -893,6 +896,8 @@ void switch_version(const char* package_name, const char* version) {
             printf("Setting '%s' as the default version of '%s'...\n", 
                    target_package, base_package);
             
+            char cmd[BUFFER_SIZE];
+            
             mkdir_p("%s/bin", INSTALL_PATH);
             mkdir_p("%s/lib", INSTALL_PATH);
             mkdir_p("%s/include", INSTALL_PATH);
@@ -1011,7 +1016,7 @@ void switch_version(const char* package_name, const char* version) {
     snprintf(cmd, sizeof(cmd),
              "rm -f %s/bin/%s* %s/lib/%s* %s/include/%s*",
              INSTALL_PATH, package_name, INSTALL_PATH, package_name, INSTALL_PATH, package_name);
-    system(cmd);
+    (void)system(cmd);
     
     snprintf(cmd, sizeof(cmd),
              "find %s -type f -o -type l | while read file; do "

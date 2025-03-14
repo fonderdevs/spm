@@ -32,14 +32,9 @@ int main(int argc, char *argv[]) {
         return 1;
     }
 
-    //the stuff with requires sudo false does not require root
-    bool requires_sudo = true;
-    
     if (strcmp(argv[1], "version") == 0) {
-        requires_sudo = false;
         show_version();
     } else if (strcmp(argv[1], "help") == 0) {
-        requires_sudo = false;
         show_help();
     } else if (strcmp(argv[1], "update") == 0) {
         if (!is_root()) {
@@ -74,7 +69,6 @@ int main(int argc, char *argv[]) {
         }
         remove_package(argv[2]);
     } else if (strcmp(argv[1], "search") == 0) {
-        requires_sudo = false;
         if (argc < 3) {
             printf("Error: Search term required\n");
             return 1;
@@ -95,7 +89,6 @@ int main(int argc, char *argv[]) {
         }
         switch_version(argv[2], argv[3]);
     } else {
-        requires_sudo = false;
         printf("Unknown command: %s\n", argv[1]);
         show_help();
         return 1;
