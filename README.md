@@ -81,9 +81,9 @@ If you have multiple Java versions installed:
 
 ```bash
 # Install different Java versions
-steal install java8
-steal install java17
-steal install java21
+steal install openjdk8
+steal install openjdk17
+steal install openjdk21
 
 # Switch to Java 8 as the default
 steal switch-version java 8
