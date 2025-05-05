@@ -5,6 +5,7 @@
 
 ![Version](https://img.shields.io/badge/version-2.0.4-blue)
 ![Author](https://img.shields.io/badge/Author-parkourer10-purple)
+![Tester](https://img.shields.io/badge/Author-eetuilia-green)
 
 </div>
 
