@@ -132,9 +132,9 @@ static download_result_t handle_download(const char* host, const char* port, con
     snprintf(request, sizeof(request),
              "GET %s HTTP/1.1\r\n"
              "Host: %s\r\n"
-             "User-Agent: steal/%s\r\n"
+             "User-Agent: spm/%s\r\n"
              "Connection: close\r\n\r\n",
-             path, host, "2.0.4");
+             path, host, "2.0.5");
     
     if (send(sockfd, request, strlen(request), 0) == -1) {
         snprintf(result.error_message, sizeof(result.error_message), 

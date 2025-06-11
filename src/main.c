@@ -22,7 +22,7 @@ bool is_root() {
 
 void show_sudo_warning(const char* command) {
     printf("\033[1;31mWarning: '%s' command requires root privileges\033[0m\n", command);
-    printf("\033[1;33mPlease run with sudo: sudo steal %s\033[0m\n\n", command);
+    printf("\033[1;33mPlease run with sudo: sudo spm %s\033[0m\n\n", command);
 }
 
 int main(int argc, char *argv[]) {

@@ -1,5 +1,5 @@
-#ifndef STEAL_PACKAGE_H
-#define STEAL_PACKAGE_H
+#ifndef spm_PACKAGE_H
+#define spm_PACKAGE_H
 
 #include <stdbool.h>
 

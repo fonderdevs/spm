@@ -1,6 +1,6 @@
 <div align="center">
 
-# 🚀 Steal Package Manager 🚀
+# 🚀 SPM 🚀
 ### A lightweight package manager for FonderOS
 
 ![Version](https://img.shields.io/badge/version-2.0.4-blue)
@@ -11,15 +11,15 @@
 
 ## 📦 About
 
-Steal is a simple and efficient package manager designed for FonderOS.
+spm is a simple and efficient package manager designed for FonderOS.
 
 ## 🛠️ Installation
 
 #### Clone the repository:
 
 ```bash
-git clone https://github.com/fonderdevs/steal.git
-cd steal
+git clone https://github.com/fonderdevs/spm.git
+cd spm
 ```
 
 #### Install the package manager:
@@ -39,42 +39,42 @@ make clean
 #### Basic Usage:
 
 ```bash
-steal install <package>
+spm install <package>
 ```
 
 #### Remove a package:
 
 ```bash
-steal remove <package>
+spm remove <package>
 ```
 
 #### Update package repositories:
 
 ```bash
-steal update
+spm update
 ```
 
 #### Upgrade installed packages:
 
 ```bash
-steal upgrade
+spm upgrade
 ```
 
 #### Search for packages:
 
 ```bash
-steal search <term>
+spm search <term>
 ```
 
 #### Switch between versions of a package:
 
 ```bash
-steal switch-version <package> <version>
+spm switch-version <package> <version>
 ```
 
 ## 🔄 Managing Multiple Package Versions
 
-Steal supports managing multiple versions of the same package (like Java 8, Java 17, Java 21) and easily switching between them.
+spm supports managing multiple versions of the same package (like Java 8, Java 17, Java 21) and easily switching between them.
 
 ### Example: Managing Java Versions
 
@@ -82,19 +82,19 @@ If you have multiple Java versions installed:
 
 ```bash
 # Install different Java versions
-steal install openjdk-8
-steal install openjdk-17
-steal install openjdk-21
+spm install openjdk-8
+spm install openjdk-17
+spm install openjdk-21
 
 # Switch to Java 8 as the default
-steal switch-version java 8
+spm switch-version java 8
 
 # Later, switch to Java 21
-steal switch-version java 21
+spm switch-version java 21
 ```
 
 When you switch versions:
-- Steal creates symbolic links from the specific version to the generic name
+- spm creates symbolic links from the specific version to the generic name
 - Applications that use the generic command (e.g., `java`) will use your selected version
 - You can keep multiple versions installed simultaneously
 - No need to manually modify PATH or environment variables

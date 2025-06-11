@@ -1,5 +1,5 @@
-#ifndef STEAL_PROGRESS_H
-#define STEAL_PROGRESS_H
+#ifndef spm_PROGRESS_H
+#define spm_PROGRESS_H
 
 #include <stdbool.h>
 #include <pthread.h>

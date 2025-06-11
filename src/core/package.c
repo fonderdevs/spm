@@ -20,8 +20,13 @@ static void network_progress_callback(size_t total, size_t current, void* userda
 }
 
 void update_repos() {
-    printf("Updating package repositories from %s...\n", server_url);
-    
+    char* mirror = get_fastest_mirror();
+    if (!mirror) {
+        printf("Error: Could not find a working mirror\n");
+        return;
+    }
+    strncpy(server_url, mirror, PATH_SIZE-1);
+    free(mirror); //free or what im not that good in C
     char cmd[BUFFER_SIZE];
     snprintf(cmd, sizeof(cmd), "mkdir -p %s", REPO_PATH);
     if (system(cmd) != 0) {
@@ -227,14 +232,14 @@ void install_package(const char* package_name) {
     char version_path[PATH_SIZE];
     
     snprintf(marker_path, sizeof(marker_path),
-            "%s/share/steal/installed/%s", INSTALL_PATH, package_name);
+            "%s/share/spm/installed/%s", INSTALL_PATH, package_name);
     if (access(marker_path, F_OK) != 0) {
         FILE* marker = fopen(marker_path, "w");
         if (marker) fclose(marker);
     }
     
     snprintf(version_path, sizeof(version_path),
-            "%s/share/steal/installed/%s.version", INSTALL_PATH, package_name);
+            "%s/share/spm/installed/%s.version", INSTALL_PATH, package_name);
     if (access(version_path, F_OK) != 0) {
         FILE* ver_file = fopen(version_path, "w");
         if (ver_file) {
@@ -308,10 +313,10 @@ bool install_precompiled_package(const char* package_name) {
     mkdir_p("%s/bin", INSTALL_PATH);
     mkdir_p("%s/lib", INSTALL_PATH);
     mkdir_p("%s/share", INSTALL_PATH);
-    mkdir_p("%s/share/steal/installed", INSTALL_PATH);
+    mkdir_p("%s/share/spm/installed", INSTALL_PATH);
     
     char metadata_dir[PATH_SIZE];
-    snprintf(metadata_dir, sizeof(metadata_dir), "%s/share/steal/metadata/%s", INSTALL_PATH, package_name);
+    snprintf(metadata_dir, sizeof(metadata_dir), "%s/share/spm/metadata/%s", INSTALL_PATH, package_name);
     mkdir_p("%s", metadata_dir);
 
     snprintf(cmd, sizeof(cmd), "cd / && tar xf '%s'", local_file);
@@ -322,7 +327,7 @@ bool install_precompiled_package(const char* package_name) {
     
     char metadata_path[PATH_SIZE];
     snprintf(metadata_path, sizeof(metadata_path), 
-             "/usr/share/steal/metadata/%s/info", package_name);
+             "/usr/share/spm/metadata/%s/info", package_name);
     
     char version[64] = {0};
     char category[128] = {0};
@@ -354,7 +359,7 @@ bool install_precompiled_package(const char* package_name) {
     char version_path[PATH_SIZE];
     
     snprintf(marker_path, sizeof(marker_path),
-            "%s/share/steal/installed/%s", INSTALL_PATH, package_name);
+            "%s/share/spm/installed/%s", INSTALL_PATH, package_name);
     FILE* marker = fopen(marker_path, "w");
     if (marker) {
         fprintf(marker, "precompiled\n");
@@ -362,7 +367,7 @@ bool install_precompiled_package(const char* package_name) {
     }
     
     snprintf(version_path, sizeof(version_path),
-            "%s/share/steal/installed/%s.version", INSTALL_PATH, package_name);
+            "%s/share/spm/installed/%s.version", INSTALL_PATH, package_name);
     FILE* ver_file = fopen(version_path, "w");
     if (ver_file) {
         fprintf(ver_file, "%s\n", version);
@@ -522,14 +527,14 @@ bool get_package_info(const char* package_name, char* version, char* category, c
 
 int is_package_installed(const char* package_name) {
     char path[512];
-    snprintf(path, sizeof(path), "%s/share/steal/installed/%s", INSTALL_PATH, package_name);
+    snprintf(path, sizeof(path), "%s/share/spm/installed/%s", INSTALL_PATH, package_name);
     return access(path, F_OK) == 0;
 }
 
 char* get_installed_version(const char* package_name) {
     char path[512];
     snprintf(path, sizeof(path), 
-             "%s/share/steal/installed/%s.version", INSTALL_PATH, package_name);
+             "%s/share/spm/installed/%s.version", INSTALL_PATH, package_name);
     
     FILE* f = fopen(path, "r");
     if (!f) return NULL;
@@ -548,7 +553,7 @@ char* get_installed_version(const char* package_name) {
 
 void list_installed_packages(char*** packages, int* count) {
     char path[512];
-    snprintf(path, sizeof(path), "%s/share/steal/installed", INSTALL_PATH);
+    snprintf(path, sizeof(path), "%s/share/spm/installed", INSTALL_PATH);
     
     DIR* dir = opendir(path);
     if (!dir) {
@@ -624,9 +629,9 @@ void remove_package(const char* package_name) {
         char version_path[512];
 
         snprintf(marker_path, sizeof(marker_path),
-                "%s/share/steal/installed/%s", INSTALL_PATH, package_name);
+                "%s/share/spm/installed/%s", INSTALL_PATH, package_name);
         snprintf(version_path, sizeof(version_path),
-                "%s/share/steal/installed/%s.version", INSTALL_PATH, package_name);
+                "%s/share/spm/installed/%s.version", INSTALL_PATH, package_name);
 
         remove(marker_path);
         remove(version_path);
@@ -639,34 +644,29 @@ void remove_package(const char* package_name) {
 
 void show_version() {
     printf("\n");
-    printf("   \033[1;36m╭─────────────────────────────╮\033[0m\n");
-    printf("   \033[1;36m│\033[0m     \033[1;35mSteal Package Manager\033[0m    \033[1;36m│\033[0m\n");
-    printf("   \033[1;36m│\033[0m        \033[1;33mversion %s\033[0m        \033[1;36m│\033[0m\n", VERSION);
-    printf("   \033[1;36m│\033[0m    Made for \033[1;35m%s\033[0m    \033[1;36m│\033[0m\n", OS_NAME);
-    printf("   \033[1;36m│\033[0m       by \033[1;32m%s\033[0m       \033[1;36m│\033[0m\n", AUTHOR);
-    printf("   \033[1;36m╰─────────────────────────────╯\033[0m\n");
+    printf("SPM\n");
+    printf("version: %s\n", VERSION);
+    printf("For: %s\n", OS_NAME);
+    printf("by: %s\n", AUTHOR);
     printf("\n");
 }
 
 void show_help() {
     printf("\n");
-    printf("   \033[1;36m╭─────────────────────────────╮\033[0m\n");
-    printf("   \033[1;36m│\033[0m     \033[1;35mSteal Package Manager\033[0m    \033[1;36m│\033[0m\n");
-    printf("   \033[1;36m│\033[0m        \033[1;33mversion %s\033[0m        \033[1;36m│\033[0m\n", VERSION);
-    printf("   \033[1;36m╰─────────────────────────────╯\033[0m\n\n");
-    printf("  \033[1;37mUsage:\033[0m steal <command> [package]\n\n");
-    printf("  \033[1;37mCommands:\033[0m\n");
-    printf("    \033[1;32mupdate\033[0m                    Update package repositories\n");
-    printf("    \033[1;32mupgrade\033[0m                   Upgrade installed packages\n");
-    printf("    \033[1;32minstall\033[0m <pkg>             Install a package\n");
-    printf("    \033[1;32mremove\033[0m  <pkg>             Remove an installed package\n");
-    printf("    \033[1;32msearch\033[0m  <term>            Search for packages\n");
-    printf("    \033[1;32mswitch-version\033[0m <pkg> <ver> Switch between installed versions of a package\n");
-    printf("                               Examples: steal switch-version <package> <version>\n");
-    printf("    \033[1;32mversion\033[0m                   Show version information\n");
-    printf("    \033[1;32mhelp\033[0m                      Show this help message\n");
+    printf("SPM\n");
+    printf("version: %s\n", VERSION);
+    printf("Usage: spm <command> [package]\n\n");
+    printf("Commands:\n");
+    printf("update                          Update package repositories\n");
+    printf("upgrade                         Upgrade installed packages\n");
+    printf("install <pkg>                   Install a package\n");
+    printf("remove <pkg>                    Remove an installed package\n");
+    printf("search <term>                   Search for packages\n");
+    printf("switch-version <pkg> <ver>      Switch between installed versions of a package\n");
+    printf("version                         Show version information\n");
+    printf("help                            Show this help message\n");
     printf("\n");
-    printf("  \033[1;37mNote:\033[0m Most commands require root privileges. Use \033[1;33msudo steal <command>\033[0m\n");
+    printf("\033[1;37mNote:\033[0m Most commands require root privileges. Use \033[1;33msudo spm <command>\033[0m\n");
     printf("\n");
 }
 
@@ -677,7 +677,7 @@ void search_packages(const char* search_term) {
     FILE* db = fopen(path, "r");
     if (!db) {
         printf("Error: Could not open package database\n");
-        printf("Try running 'steal update' first\n");
+        printf("Try running 'spm update' first\n");
         return;
     }
     
@@ -933,9 +933,9 @@ void switch_version(const char* package_name, const char* version) {
             
             char marker_path[PATH_SIZE];
             snprintf(marker_path, sizeof(marker_path),
-                    "%s/share/steal/defaults/%s.default", INSTALL_PATH, base_package);
+                    "%s/share/spm/defaults/%s.default", INSTALL_PATH, base_package);
             
-            mkdir_p("%s/share/steal/defaults", INSTALL_PATH);
+            mkdir_p("%s/share/spm/defaults", INSTALL_PATH);
             
             FILE* marker = fopen(marker_path, "w");
             if (marker) {
@@ -971,7 +971,7 @@ void switch_version(const char* package_name, const char* version) {
     
     char version_path[PATH_SIZE];
     snprintf(version_path, sizeof(version_path), 
-             "%s/share/steal/versions/%s/%s", INSTALL_PATH, package_name, version);
+             "%s/share/spm/versions/%s/%s", INSTALL_PATH, package_name, version);
     
     if (access(version_path, F_OK) != 0) {
         printf("Error: Version %s of package '%s' is not installed\n", version, package_name);
@@ -979,7 +979,7 @@ void switch_version(const char* package_name, const char* version) {
         
         char versions_dir[PATH_SIZE];
         snprintf(versions_dir, sizeof(versions_dir), 
-                 "%s/share/steal/versions/%s", INSTALL_PATH, package_name);
+                 "%s/share/spm/versions/%s", INSTALL_PATH, package_name);
         
         DIR* dir = opendir(versions_dir);
         if (!dir) {
@@ -987,7 +987,10 @@ void switch_version(const char* package_name, const char* version) {
             free(current_version);
             return;
         }
-        
+            printf("   \033[1;36m╭─────────────────────────────╮\033[0m\n");
+    printf("   \033[1;36m│\033[0m     \033[1;35mspm Package Manager\033[0m    \033[1;36m│\033[0m\n");
+    printf("   \033[1;36m│\033[0m        \033[1;33mversion %s\033[0m        \033[1;36m│\033[0m\n", VERSION);
+    printf("   \033[1;36m╰─────────────────────────────╯\033[0m\n\n");
         struct dirent* entry;
         int found = 0;
         while ((entry = readdir(dir)) != NULL) {
@@ -1020,7 +1023,7 @@ void switch_version(const char* package_name, const char* version) {
     
     snprintf(cmd, sizeof(cmd),
              "find %s -type f -o -type l | while read file; do "
-             "target=$(echo $file | sed 's|%s/share/steal/versions/%s/%s/||'); "
+             "target=$(echo $file | sed 's|%s/share/spm/versions/%s/%s/||'); "
              "target_dir=$(dirname %s/$target); "
              "mkdir -p $target_dir; "
              "ln -sf $file %s/$target; "
@@ -1032,7 +1035,7 @@ void switch_version(const char* package_name, const char* version) {
     if (result == 0) {
         char version_file_path[PATH_SIZE];
         snprintf(version_file_path, sizeof(version_file_path),
-                 "%s/share/steal/installed/%s.version", INSTALL_PATH, package_name);
+                 "%s/share/spm/installed/%s.version", INSTALL_PATH, package_name);
         
         FILE* f = fopen(version_file_path, "w");
         if (f) {
@@ -1047,4 +1050,4 @@ void switch_version(const char* package_name, const char* version) {
     }
     
     free(current_version);
-} 
+}
