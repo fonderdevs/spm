@@ -13,9 +13,9 @@ jobs:
 
     steps:
     - uses: actions/checkout@v4
-    - name: Compile steal
+    - name: Compile spm
       run: sudo make
     - name: Install steal
       run: sudo make install
     - name: test package manager
-      run: sudo steal update
+      run: spm
