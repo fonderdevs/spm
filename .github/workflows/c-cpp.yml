@@ -18,4 +18,6 @@ jobs:
     - name: Install steal
       run: sudo make install
     - name: test package manager
-      run: sudo spm
+      run: sudo spm help
+    - name: uninstall
+      run: sudo make uninstall
