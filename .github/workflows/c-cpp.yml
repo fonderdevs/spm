@@ -18,4 +18,4 @@ jobs:
     - name: Install steal
       run: sudo make install
     - name: test package manager
-      run: spm
+      run: sudo spm
