@@ -1,7 +1,7 @@
 <div align="center">
 
 # 🚀 SPM 🚀
-### A lightweight package manager for FonderOS
+### A lightweight package manager for Linux
 
 ![Version](https://img.shields.io/badge/version-2.0.5-blue)
 ![Author](https://img.shields.io/badge/Author-parkourer10-purple)
