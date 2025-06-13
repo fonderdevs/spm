@@ -11,7 +11,7 @@
 
 ## 📦 About
 
-spm is a simple and efficient package manager designed for FonderOS.
+spm is a simple and efficient package manager designed for any linux OS
 
 ## 🛠️ Installation
 
